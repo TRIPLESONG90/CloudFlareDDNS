@@ -189,6 +189,7 @@
                             ■ Stop
                         </button>
                         <button class="btn btn-sm btn-danger"
+                        @onclick="() => Remove(worker)"
                         disabled="@(worker.IsRunning)">
                             ✖ Remove
                         </button>
@@ -221,7 +222,11 @@
     }
     void Start(DDNSWorker worker) => WorkerManager.StartWorker(worker);
     void Stop(DDNSWorker worker) => WorkerManager.StopWorker(worker);
-
+    void Remove(DDNSWorker worker)
+    {
+        WorkerManager.RemoveWorker(worker);
+        StateHasChanged();
+    }
 
     void ShowModal()
     {
@@ -244,17 +249,6 @@
             using var client = new CloudFlareClient(NewWorker.Email, NewWorker.ApiKey);
 
             zones = client.Zones.GetAsync().Result.Result;
-
-            // foreach (var zone in zones.Result)
-            // {
-            //     var dnsRecords = await client.Zones.DnsRecords.GetAsync(zone.Id, cancellationToken: ct);
-            //     foreach (var dnsRecord in dnsRecords.Result)
-            //     {
-            //         Console.WriteLine(dnsRecord.Name);
-            //     }
-
-            //     Console.WriteLine(zone.Name);
-            // }
         }
 
         if (CurrentStep < 4)

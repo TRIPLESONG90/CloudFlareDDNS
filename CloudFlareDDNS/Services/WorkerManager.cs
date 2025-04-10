@@ -29,6 +29,10 @@ namespace CloudFlareDDNS.Services
         {
             worker.Stop();
         }
+        public void RemoveWorker(DDNSWorker worker)
+        {
+            _workers.Remove(worker);
+        }   
 
         public IEnumerable<DDNSWorker> GetAllWorkers() => _workers;
 
