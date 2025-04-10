@@ -40,9 +40,9 @@
                     }
                     else if (CurrentStep == 2)
                     {
-                                                    <h1 class="text-3xl font-bold underline">
-                                Select Zone
-                            </h1>
+                        <h1 class="text-3xl font-bold underline">
+                            Select Zone
+                        </h1>
 
                         <table class="table table-hover table-bordered align-middle text-center">
                             <thead>
@@ -75,9 +75,9 @@
                     }
                     else if (CurrentStep == 3)
                     {
-                                                                            <h1 class="text-3xl font-bold underline">
-                                Select DNS Record
-                            </h1>
+                        <h1 class="text-3xl font-bold underline">
+                            Select DNS Record
+                        </h1>
 
                         <table class="table table-hover table-bordered align-middle text-center">
                             <thead>
@@ -212,6 +212,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        workers = WorkerManager.GetAllWorkers();
     }
 
     string GetRowClass(DDNSWorker worker)
