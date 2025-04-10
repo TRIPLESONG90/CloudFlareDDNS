@@ -1,0 +1,346 @@
+﻿@page "/"
+@using CloudFlare.Client
+@using CloudFlare.Client.Api.Zones
+@using CloudFlare.Client.Api.Zones.DnsRecord
+@using CloudFlareDDNS.Models
+@using CloudFlareDDNS.Services
+@using System.Text.Json
+@inject ILoggerFactory  LoggerFactory
+@inject WorkerManager WorkerManager
+@inject IHttpClientFactory HttpClientFactory
+<PageTitle>Home</PageTitle>
+
+<h1 class="mb-4 d-flex justify-content-between align-items-center">
+    Workers
+    <button class="btn btn-success" @onclick="ShowModal">+ Add Worker</button>
+</h1>
+
+@if (IsModalVisible)
+{
+    <div class="modal-backdrop fade show"></div>
+
+    <div class="modal d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Worker - Step @CurrentStep</h5>
+                    <button type="button" class="btn-close" @onclick="HideModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    @if (CurrentStep == 1)
+                    {
+                        <div class="mb-3">
+                            <h1 class="text-3xl font-bold underline">
+                                API Credentials
+                            </h1>
+                            <input class="form-control mb-3" @bind="NewWorker.Email" placeholder="Email" />
+                            <input class="form-control mb-3" @bind="NewWorker.ApiKey" placeholder="ApiKey" />
+                        </div>
+                    }
+                    else if (CurrentStep == 2)
+                    {
+                                                    <h1 class="text-3xl font-bold underline">
+                                Select Zone
+                            </h1>
+
+                        <table class="table table-hover table-bordered align-middle text-center">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">NameServers</th>
+                                    <th scope="col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var zone in zones)
+                                {
+                                    <tr>
+                                        <td>@zone.Name</td>
+                                        <td>@zone.Status</td>
+                                        <td>
+                                            @foreach (var ns in zone.NameServers)
+                                            {
+                                                <span class="badge bg-secondary me-1">@ns</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-primary" @onclick="()=>SelectZone(zone)">Select</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else if (CurrentStep == 3)
+                    {
+                                                                            <h1 class="text-3xl font-bold underline">
+                                Select DNS Record
+                            </h1>
+
+                        <table class="table table-hover table-bordered align-middle text-center">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in records)
+                                {
+                                    <tr>
+                                        <td>@record.Name</td>
+                                        <td>@record.Type</td>
+                                        <td>
+                                            <button class="btn btn-primary" @onclick="()=>SelectRecord(record)">Select</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else if (CurrentStep == 4)
+                    {
+                        <div class="alert alert-secondary">
+                            <strong>Confirm the details:</strong>
+                            <ul class="mb-0">
+                                <li><strong>Email:</strong> @NewWorker.Email</li>
+                                <li><strong>ApiKey:</strong> @NewWorker.ApiKey</li>
+                                <li><strong>Zone:</strong> @SelectedZone.Name</li>
+                                <li>
+                                    <strong>Record:</strong><br />
+                                    Name: @SelectedRecord.Name<br />
+                                    Type: @SelectedRecord.Type<br />
+                                    Content: @SelectedRecord.Content
+                                </li>
+                            </ul>
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    @if (CurrentStep > 1)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="PrevStep">← Previous</button>
+                    }
+
+                    @if (CurrentStep < 4 && CurrentStep != 2 && CurrentStep != 3)
+                    {
+                        <button class="btn btn-primary" @onclick="NextStep">Next →</button>
+                    }
+                    else if(CurrentStep == 4)
+                    {
+                        <button class="btn btn-success" @onclick="AddWorker">✅ Confirm & Add</button>
+                    }
+
+                    <button class="btn btn-secondary" @onclick="HideModal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+<div class="table-responsive">
+    <table class="table table-hover table-bordered align-middle text-center">
+        <thead class="table-dark">
+            <tr>
+                <th scope="col">Zone</th>
+                <th scope="col">DNS Name</th>
+                <th scope="col">DNS Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var worker in workers)
+            {
+                <tr class="@GetRowClass(worker)">
+                    <td>
+                        @GetZoneName(worker.Options)
+                    </td>
+                    <td>
+                        @GetDnsRecordName(worker.Options)
+                    </td>
+                    <td>
+                        @GetDnsRecordType(worker.Options)
+                    </td>
+                    <td>
+                        @if (worker.IsRunning)
+                        {
+                            <span class="badge bg-success">Running</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Stopped</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-primary me-1"
+                        @onclick="() => Start(worker)"
+                        disabled="@worker.IsRunning">
+                            ▶ Start
+                        </button>
+                        <button class="btn btn-sm btn-warning me-1"
+                        @onclick="() => Stop(worker)"
+                        disabled="@(!worker.IsRunning)">
+                            ■ Stop
+                        </button>
+                        <button class="btn btn-sm btn-danger"
+                        disabled="@(worker.IsRunning)">
+                            ✖ Remove
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+
+@code{
+    IEnumerable<DDNSWorker> workers = new List<DDNSWorker>();
+    IEnumerable<Zone> zones;
+    IEnumerable<DnsRecord> records;
+    bool IsModalVisible = false;
+    int CurrentStep = 1;
+    DDNSWorkerOptions NewWorker = new();
+    Zone SelectedZone;
+    DnsRecord SelectedRecord;
+
+    protected override async Task OnInitializedAsync()
+    {
+    }
+
+    string GetRowClass(DDNSWorker worker)
+    {
+        return worker.IsRunning ? "table-success" : "table-light";
+    }
+    void Start(DDNSWorker worker) => WorkerManager.StartWorker(worker);
+    void Stop(DDNSWorker worker) => WorkerManager.StopWorker(worker);
+
+
+    void ShowModal()
+    {
+        NewWorker = new();
+        CurrentStep = 1;
+        IsModalVisible = true;
+    }
+
+    void HideModal()
+    {
+        IsModalVisible = false;
+        CurrentStep = 1;
+    }
+
+    void NextStep()
+    {
+        if(CurrentStep == 1)
+        {
+
+            using var client = new CloudFlareClient(NewWorker.Email, NewWorker.ApiKey);
+
+            zones = client.Zones.GetAsync().Result.Result;
+
+            // foreach (var zone in zones.Result)
+            // {
+            //     var dnsRecords = await client.Zones.DnsRecords.GetAsync(zone.Id, cancellationToken: ct);
+            //     foreach (var dnsRecord in dnsRecords.Result)
+            //     {
+            //         Console.WriteLine(dnsRecord.Name);
+            //     }
+
+            //     Console.WriteLine(zone.Name);
+            // }
+        }
+
+        if (CurrentStep < 4)
+            CurrentStep++;
+    }
+    string GetZoneName(DDNSWorkerOptions options)
+    {
+        using var client = new CloudFlareClient(options.Email, options.ApiKey);
+        var zones = client.Zones.GetAsync().Result.Result;
+
+        foreach (var zone in zones)
+        {
+            if (zone.Id == options.ZoneId)
+            {
+                return zone.Name;
+            }
+        }
+        return "Unknown Zone";
+    }
+
+    string GetDnsRecordName(DDNSWorkerOptions options)
+    {
+        using var client = new CloudFlareClient(options.Email, options.ApiKey);
+        var zones = client.Zones.GetAsync().Result.Result;
+
+        foreach (var zone in zones)
+        {
+            if (zone.Id == options.ZoneId)
+            {
+                records = client.Zones.DnsRecords.GetAsync(zone.Id).Result.Result;
+                foreach (var record in records)
+                {
+                    if (record.Id == options.RecordId)
+                    {
+                        return $"{record.Name}";
+                    }
+                }
+            }
+        }
+        return "Unknown DnsRecord";
+    }
+    string GetDnsRecordType(DDNSWorkerOptions options)
+    {
+        using var client = new CloudFlareClient(options.Email, options.ApiKey);
+        var zones = client.Zones.GetAsync().Result.Result;
+
+        foreach (var zone in zones)
+        {
+            if (zone.Id == options.ZoneId)
+            {
+                records = client.Zones.DnsRecords.GetAsync(zone.Id).Result.Result;
+                foreach (var record in records)
+                {
+                    if (record.Id == options.RecordId)
+                    {
+                        return $"{record.Type}";
+                    }
+                }
+            }
+        }
+        return "Unknown DnsRecord";
+    }
+    void PrevStep()
+    {
+        if (CurrentStep > 1)
+            CurrentStep--;
+    }
+
+    void AddWorker()
+    {
+        WorkerManager.AddWorker(NewWorker);
+        workers = WorkerManager.GetAllWorkers();
+        HideModal();
+    }
+    private void SelectZone(Zone zone)
+    {
+        SelectedZone = zone;
+        using var client = new CloudFlareClient(NewWorker.Email, NewWorker.ApiKey);
+        records = client.Zones.DnsRecords.GetAsync(SelectedZone.Id).Result.Result;
+        NewWorker.ZoneId = zone.Id;
+        CurrentStep++;
+    }
+
+    private void SelectRecord(DnsRecord record)
+    {
+        SelectedRecord = record;
+        NewWorker.RecordId = record.Id;
+        CurrentStep++;
+    }
+}
